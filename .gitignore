@@ -1,0 +1,15 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+*.log
+.npmrc
+.turbo
+.vercel
+.idea
+.vscode
+*.local
+supabase/.temp/
+**/.temp/
