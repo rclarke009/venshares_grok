@@ -5,8 +5,7 @@ const ZEPTOMAIL_URL = Deno.env.get("ZEPTOMAIL_URL") ?? "https://api.zeptomail.co
 const ZEPTOMAIL_TOKEN = Deno.env.get("ZEPTOMAIL_TOKEN");
 const CONTACT_FORM_KEY = Deno.env.get("CONTACT_FORM_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("VITE_SUPABASE_URL");
-const SUPABASE_ANON_KEY =
-  Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("VITE_SUPABASE_ANON_KEY");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 const CORS_ORIGIN =
   Deno.env.get("CONTACT_CORS_ORIGIN") ?? "https://www.venshares.com";
@@ -21,11 +20,16 @@ function corsHeaders(extra: Record<string, string> = {}): HeadersInit {
   };
 }
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.error("MYDEBUG →", "Missing SUPABASE_URL/VITE_SUPABASE_URL or anon key for Edge Function");
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error(
+    "MYDEBUG →",
+    "Missing SUPABASE_URL/VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for Edge Function",
+  );
 }
 
-const supabase = createClient(SUPABASE_URL ?? "", SUPABASE_ANON_KEY ?? "");
+const supabase = createClient(SUPABASE_URL ?? "", SUPABASE_SERVICE_ROLE_KEY ?? "", {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const sanitize = (input: string) =>
@@ -63,8 +67,8 @@ serve(async (req) => {
       });
     }
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      throw new Error("Supabase URL or anon key is not configured for this function");
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error("Supabase URL or service role key is not configured for this function");
     }
 
     const ipAddress = req.headers.get("X-Forwarded-For") || "unknown";

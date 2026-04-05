@@ -5,7 +5,9 @@ import { MAX_UPLOAD_BYTES } from "@/lib/constants";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+const PROJECT_FILE_INPUT_ID = "project-file-input";
 
 type Row = {
   id: string;
@@ -25,6 +27,8 @@ export function ProjectDetailClient({ projectId }: { projectId: string }) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const filesSectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,6 +109,7 @@ export function ProjectDetailClient({ projectId }: { projectId: string }) {
     if (!user) {
       setToast("Not signed in.");
       setUploading(false);
+      setTimeout(() => setToast(null), 4000);
       return;
     }
     const { error: insErr } = await supabase.from("files").insert({
@@ -116,26 +121,36 @@ export function ProjectDetailClient({ projectId }: { projectId: string }) {
     if (insErr) {
       setToast("Could not save file metadata.");
       console.error("MYDEBUG →", insErr.message);
-    } else {
-      setToast("Upload successful.");
-      setShowUpload(false);
-      setFile(null);
-      const { data } = await supabase
-        .from("files")
-        .select("*")
-        .eq("project_id", projectId);
-      const withUrls = await Promise.all(
-        (data ?? []).map(async (row: Row) => {
-          const { data: urlData } = await supabase.storage
-            .from("project-files")
-            .createSignedUrl(row.file_path, 3600);
-          return { ...row, signedUrl: urlData?.signedUrl ?? "" };
-        }),
-      );
-      setFiles(withUrls);
+      setUploading(false);
+      setTimeout(() => setToast(null), 4000);
+      return;
     }
+    const uploadedName = file.name;
+    setToast(`Upload successful — ${uploadedName} added.`);
+    setShowUpload(false);
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    const { data } = await supabase
+      .from("files")
+      .select("*")
+      .eq("project_id", projectId);
+    const withUrls = await Promise.all(
+      (data ?? []).map(async (row: Row) => {
+        const { data: urlData } = await supabase.storage
+          .from("project-files")
+          .createSignedUrl(row.file_path, 3600);
+        return { ...row, signedUrl: urlData?.signedUrl ?? "" };
+      }),
+    );
+    setFiles(withUrls);
     setUploading(false);
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => {
+      filesSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 100);
+    setTimeout(() => setToast(null), 5000);
   };
 
   return (
@@ -157,14 +172,34 @@ export function ProjectDetailClient({ projectId }: { projectId: string }) {
 
       {showUpload ? (
         <div className="mt-6 rounded-xl border bg-card p-4">
-          <p className="text-xs text-muted-foreground">
+          <p
+            id="project-upload-size-hint"
+            className="text-xs text-muted-foreground"
+          >
             Max {MAX_UPLOAD_BYTES / 1024 / 1024} MB.
           </p>
           <input
+            ref={fileInputRef}
+            id={PROJECT_FILE_INPUT_ID}
             type="file"
-            className="mt-2 block w-full text-sm"
+            className="sr-only"
+            aria-describedby="project-upload-size-hint"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <label
+              htmlFor={PROJECT_FILE_INPUT_ID}
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "cursor-pointer",
+              )}
+            >
+              Choose file
+            </label>
+            <span className="text-sm text-muted-foreground">
+              {file ? file.name : "No file selected"}
+            </span>
+          </div>
           <div className="mt-4 flex gap-2">
             <Button
               type="button"
@@ -179,6 +214,7 @@ export function ProjectDetailClient({ projectId }: { projectId: string }) {
               onClick={() => {
                 setShowUpload(false);
                 setFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = "";
               }}
               disabled={uploading}
             >
@@ -188,35 +224,44 @@ export function ProjectDetailClient({ projectId }: { projectId: string }) {
         </div>
       ) : null}
 
-      <h2 className="mt-10 text-xl font-semibold">Files</h2>
-      {loading ? (
-        <p className="text-muted-foreground">Loading…</p>
-      ) : files.length === 0 ? (
-        <p className="text-muted-foreground">No files yet.</p>
-      ) : (
-        <ul className="mt-4 space-y-2">
-          {files.map((f) => (
-            <li
-              key={f.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3"
-            >
-              <span className="font-medium">{f.file_name}</span>
-              <span className="flex gap-2">
-                <a
-                  href={f.signedUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    buttonVariants({ size: "sm", variant: "secondary" }),
-                  )}
-                >
-                  Open
-                </a>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <section
+        ref={filesSectionRef}
+        id="files"
+        className="mt-10 scroll-mt-6"
+        aria-labelledby="project-files-heading"
+      >
+        <h2 id="project-files-heading" className="text-xl font-semibold">
+          Files
+        </h2>
+        {loading ? (
+          <p className="text-muted-foreground">Loading…</p>
+        ) : files.length === 0 ? (
+          <p className="text-muted-foreground">No files yet.</p>
+        ) : (
+          <ul className="mt-4 space-y-2">
+            {files.map((f) => (
+              <li
+                key={f.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3"
+              >
+                <span className="font-medium">{f.file_name}</span>
+                <span className="flex gap-2">
+                  <a
+                    href={f.signedUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      buttonVariants({ size: "sm", variant: "secondary" }),
+                    )}
+                  >
+                    Open
+                  </a>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {toast ? (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-ven-green px-4 py-2 text-sm text-white shadow-lg">

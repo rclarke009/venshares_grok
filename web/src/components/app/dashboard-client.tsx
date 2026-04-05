@@ -6,8 +6,10 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
+
+const DASHBOARD_FILE_INPUT_ID = "dashboard-file-input";
 
 type Project = {
   id: string;
@@ -24,6 +26,7 @@ export function DashboardClient() {
   const [showUpload, setShowUpload] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,9 +52,9 @@ export function DashboardClient() {
     };
   }, [supabase]);
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, durationMs = 3000) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), durationMs);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -99,9 +102,11 @@ export function DashboardClient() {
       console.error("MYDEBUG →", insErr.message);
       return;
     }
+    const uploadedName = file.name;
     setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setShowUpload(false);
-    showToast("Upload successful.");
+    showToast(`Upload successful — ${uploadedName} added.`, 5000);
   };
 
   return (
@@ -182,16 +187,44 @@ export function DashboardClient() {
         >
           <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-lg">
             <h3 className="text-lg font-semibold">Upload to project</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p
+              id="dashboard-upload-size-hint"
+              className="mt-1 text-xs text-muted-foreground"
+            >
               Max {MAX_UPLOAD_BYTES / 1024 / 1024} MB per file.
             </p>
             <input
+              ref={fileInputRef}
+              id={DASHBOARD_FILE_INPUT_ID}
               type="file"
-              className="mt-4 block w-full text-sm"
+              className="sr-only"
+              aria-describedby="dashboard-upload-size-hint"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <label
+                htmlFor={DASHBOARD_FILE_INPUT_ID}
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "cursor-pointer",
+                )}
+              >
+                Choose file
+              </label>
+              <span className="text-sm text-muted-foreground">
+                {file ? file.name : "No file selected"}
+              </span>
+            </div>
             <div className="mt-6 flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => setShowUpload(false)}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setShowUpload(false);
+                  setFile(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+              >
                 Cancel
               </Button>
               <Button type="button" onClick={() => void handleUpload()} disabled={!file}>
